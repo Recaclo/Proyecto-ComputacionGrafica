@@ -35,6 +35,11 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mode
 void MouseCallback(GLFWwindow *window, double xPos, double yPos);
 void DoMovement();
 void Animation();
+void InitProjectAnimations();
+void UpdateProjectAnimations();
+void DrawCubeObject(Shader shader, GLuint VAO, GLint modelLoc, glm::vec3 pos, glm::vec3 scale, glm::vec4 color, float rotY = 0.0f);
+void DrawProjectAnimations(Shader colorShader, GLuint VAO, glm::mat4 view, glm::mat4 projection);
+void DrawStandModel(Model& standModel, Shader shader, GLint modelLoc, glm::vec3 pos, glm::vec3 scale, float rotY);
 
 // Window dimensions
 const GLuint WIDTH = 800, HEIGHT = 600;
@@ -119,7 +124,59 @@ float tail = 0.0f;
 glm::vec3 dogPos (0.0f,0.0f,0.0f);
 float dogRot = 0.0f;
 bool step = false;
+// ===============================
+// ANIMACIONES DEL PROYECTO PUENTE
+// ===============================
 
+// Activadores
+bool animStands = false;
+bool animPeople = false;
+bool animSigns = false;
+bool animScreens = false;
+bool animReactiveLights = true;
+
+// Tiempo interno para animaciones
+float projectTime = 0.0f;
+
+// Animación 2: stands con KeyFrames
+float standAnimTime = 0.0f;
+float standScale = 0.0f;
+
+// Posiciones de stands, ajusta X/Z si no coinciden con tu puente
+const int NUM_STANDS = 8;
+
+glm::vec3 standPositions[NUM_STANDS] = {
+	// Lado izquierdo del puente
+	glm::vec3(-1.4f, -0.65f, -6.6f),
+	glm::vec3(-1.4f, -0.65f, -5.8f),
+	glm::vec3(-1.4f, -0.65f, -5.0f),
+	glm::vec3(-1.4f, -0.65f, -4.2f),
+
+	// Lado derecho del puente
+	glm::vec3(1.4f, -0.65f, -6.6f),
+	glm::vec3(1.4f, -0.65f, -5.8f),
+	glm::vec3(1.4f, -0.65f, -5.0f),
+	glm::vec3(1.4f, -0.65f, -4.2f)
+};
+
+float standRotations[NUM_STANDS] = {
+	90.0f, 90.0f, 90.0f, 90.0f,
+   -90.0f, -90.0f, -90.0f, -90.0f
+};
+
+// Animación 1: personas
+const int NUM_PEOPLE = 12;
+glm::vec3 peoplePos[NUM_PEOPLE];
+float peopleSpeed[NUM_PEOPLE];
+int peopleDir[NUM_PEOPLE];
+
+// Animación 4: señalización
+float arrowPulse = 0.0f;
+int arrowDirection = 1;
+
+// Animación 6: pantallas
+float screenTimer = 0.0f;
+int screenSlide = 0;
 
 
 // Deltatime
@@ -175,7 +232,8 @@ int main()
 
 	Shader lightingShader("Shader/lighting.vs", "Shader/lighting.frag");
 	Shader lampShader("Shader/lamp.vs", "Shader/lamp.frag");
-	
+	Shader colorShader("Shader/color.vs", "Shader/color.frag");
+
 	//models
 	//cada una de las piezas del perro pero por separado 
 	/*Model DogBody((char*)"Models/DogBody.obj");
@@ -189,6 +247,8 @@ int main()
 	Model Ball((char*)"Models/ball.obj");*/
 	// Modelo principal del proyecto: puente de la Facultad de Ingeniería
 	Model Puente((char*)"Models/final_puente.obj");
+	InitProjectAnimations();
+	Model Stand((char*)"Models/3d-model.obj");
 
 
 
@@ -226,6 +286,7 @@ int main()
 		glfwPollEvents();
 		DoMovement();
 		Animation();
+		UpdateProjectAnimations();
 
 		// Clear the colorbuffer
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -315,6 +376,33 @@ int main()
 
 		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 		Puente.Draw(lightingShader);
+		// ===============================
+// STANDS CON MODELOS 3D REALES
+// ===============================
+		for (int i = 0; i < NUM_STANDS; i++)
+		{
+			float distToCamera = glm::distance(camera.GetPosition(), standPositions[i]);
+			bool activeStand = distToCamera < 1.8f;
+
+			float focusScale = activeStand ? 1.15f : 1.0f;
+
+			glm::vec3 finalScale = glm::vec3(0.12f, 0.12f, 0.12f) * standScale * focusScale;
+
+			if (i % 3 == 0)
+			{
+				DrawStandModel(Stand, lightingShader, modelLoc, standPositions[i], finalScale, standRotations[i]);
+			}
+			else if (i % 3 == 1)
+			{
+				DrawStandModel(Stand, lightingShader, modelLoc, standPositions[i], finalScale, standRotations[i]);
+			}
+			else
+			{
+				DrawStandModel(Stand, lightingShader, modelLoc, standPositions[i], finalScale, standRotations[i]);
+			}
+		}
+
+		DrawProjectAnimations(colorShader, VAO, view, projection);
 
 		//model = glm::mat4(1);
 		//glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
@@ -518,6 +606,31 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mode
 		dogAnim = 1;
 		
 	}
+	if (key == GLFW_KEY_1 && action == GLFW_PRESS)
+	{
+		animStands = !animStands;
+	}
+
+	if (key == GLFW_KEY_2 && action == GLFW_PRESS)
+	{
+		animPeople = !animPeople;
+	}
+
+	if (key == GLFW_KEY_3 && action == GLFW_PRESS)
+	{
+		animSigns = !animSigns;
+	}
+
+	if (key == GLFW_KEY_4 && action == GLFW_PRESS)
+	{
+		animScreens = !animScreens;
+	}
+
+	if (key == GLFW_KEY_5 && action == GLFW_PRESS)
+	{
+		animReactiveLights = !animReactiveLights;
+	}
+
 	
 }
 void Animation() {
@@ -653,6 +766,306 @@ void Animation() {
 	}
 
 }
+
+
+
+void InitProjectAnimations()
+{
+	// Inicialización de personas caminando en ambos sentidos
+	for (int i = 0; i < NUM_PEOPLE; i++)
+	{
+		peopleDir[i] = (i % 2 == 0) ? 1 : -1;
+
+		float laneX = (i % 3 - 1) * 0.45f; // carriles centrales: -0.45, 0, 0.45
+		float startZ = (peopleDir[i] == 1) ? -4.0f - i * 0.35f : 2.0f + i * 0.35f;
+
+		peoplePos[i] = glm::vec3(laneX, -0.15f, startZ);
+		peopleSpeed[i] = 0.6f + (i % 4) * 0.12f;
+	}
+}
+
+void UpdateProjectAnimations()
+{
+	projectTime += deltaTime;
+
+	// ================================
+	// Animación 2: Stands por KeyFrames
+	// ================================
+	if (animStands)
+	{
+		standAnimTime += deltaTime;
+		if (standAnimTime > 5.0f)
+			standAnimTime = 5.0f;
+	}
+	else
+	{
+		standAnimTime -= deltaTime;
+		if (standAnimTime < 0.0f)
+			standAnimTime = 0.0f;
+	}
+
+	// KeyFrames:
+	// KF0 = 0.0 -> scale 0.0
+	// KF1 = 1.0 -> scale 0.3
+	// KF2 = 2.0 -> scale 0.6
+	// KF3 = 3.5 -> scale 0.9
+	// KF4 = 5.0 -> scale 1.0
+
+	if (standAnimTime < 1.0f)
+		standScale = glm::mix(0.0f, 0.3f, standAnimTime / 1.0f);
+	else if (standAnimTime < 2.0f)
+		standScale = glm::mix(0.3f, 0.6f, (standAnimTime - 1.0f) / 1.0f);
+	else if (standAnimTime < 3.5f)
+		standScale = glm::mix(0.6f, 0.9f, (standAnimTime - 2.0f) / 1.5f);
+	else
+		standScale = glm::mix(0.9f, 1.0f, (standAnimTime - 3.5f) / 1.5f);
+
+	// ================================
+	// Animación 1: flujo de personas
+	// ================================
+	if (animPeople)
+	{
+		for (int i = 0; i < NUM_PEOPLE; i++)
+		{
+			peoplePos[i].z += peopleDir[i] * peopleSpeed[i] * deltaTime;
+
+			// Simulación sencilla de evitar choques:
+			// si dos personas están muy cerca, una se mueve un poco a la izquierda/derecha
+			for (int j = 0; j < NUM_PEOPLE; j++)
+			{
+				if (i == j) continue;
+
+				float d = glm::distance(peoplePos[i], peoplePos[j]);
+				if (d < 0.35f)
+				{
+					if (peoplePos[i].x < peoplePos[j].x)
+						peoplePos[i].x -= 0.3f * deltaTime;
+					else
+						peoplePos[i].x += 0.3f * deltaTime;
+				}
+			}
+
+			// Evitar invadir área de stands, mantenerlos en zona central
+			if (peoplePos[i].x > 1.0f) peoplePos[i].x = 1.0f;
+			if (peoplePos[i].x < -1.0f) peoplePos[i].x = -1.0f;
+
+			// Reinicio cuando salen del puente
+			if (peopleDir[i] == 1 && peoplePos[i].z > 2.5f)
+				peoplePos[i].z = -4.5f;
+
+			if (peopleDir[i] == -1 && peoplePos[i].z < -4.5f)
+				peoplePos[i].z = 2.5f;
+		}
+	}
+
+	// ================================
+	// Animación 4: señalización dinámica
+	// ================================
+	if (animSigns)
+	{
+		arrowPulse = (sin(projectTime * 4.0f) + 1.0f) / 2.0f;
+
+		// Cambia dirección cada cierto tiempo
+		if (fmod(projectTime, 8.0f) < 4.0f)
+			arrowDirection = 1;
+		else
+			arrowDirection = -1;
+	}
+
+	// ================================
+	// Animación 6: pantallas dinámicas
+	// ================================
+	if (animScreens)
+	{
+		screenTimer += deltaTime;
+		if (screenTimer > 2.0f)
+		{
+			screenTimer = 0.0f;
+			screenSlide++;
+
+			if (screenSlide > 2)
+				screenSlide = 0;
+		}
+	}
+
+	// ================================
+	// Animación 5: iluminación reactiva
+	// ================================
+	if (animReactiveLights)
+	{
+		// La luz principal sigue o reacciona al usuario/cámara.
+		pointLightPositions[0].x = camera.GetPosition().x;
+		pointLightPositions[0].y = 1.6f;
+		pointLightPositions[0].z = camera.GetPosition().z;
+	}
+}
+
+void DrawCubeObject(Shader shader, GLuint VAO, GLint modelLoc, glm::vec3 pos, glm::vec3 scale, glm::vec4 color, float rotY)
+{
+	glm::mat4 model = glm::mat4(1.0f);
+
+	model = glm::translate(model, pos);
+	model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+	model = glm::scale(model, scale);
+
+	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+	glUniform4f(glGetUniformLocation(shader.Program, "objectColor"), color.r, color.g, color.b, color.a);
+
+	glBindVertexArray(VAO);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+	glBindVertexArray(0);
+}
+void DrawStandModel(Model& standModel, Shader shader, GLint modelLoc, glm::vec3 pos, glm::vec3 scale, float rotY)
+{
+	glm::mat4 model = glm::mat4(1.0f);
+
+	model = glm::translate(model, pos);
+	model = glm::rotate(model, glm::radians(rotY), glm::vec3(0.0f, 1.0f, 0.0f));
+	model = glm::scale(model, scale);
+
+	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+	standModel.Draw(shader);
+}
+
+void DrawProjectAnimations(Shader colorShader, GLuint VAO, glm::mat4 view, glm::mat4 projection)
+{
+	colorShader.Use();
+
+	GLint modelLoc = glGetUniformLocation(colorShader.Program, "model");
+	GLint viewLoc = glGetUniformLocation(colorShader.Program, "view");
+	GLint projLoc = glGetUniformLocation(colorShader.Program, "projection");
+
+	glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+	glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+	// ================================
+	// Animación 2 y 3: stands + enfoque
+	// ================================
+	for (int i = 0; i < NUM_STANDS; i++)
+	{
+		float distToCamera = glm::distance(camera.GetPosition(), standPositions[i]);
+
+		bool activeStand = distToCamera < 1.8f;
+
+		float focusScale = activeStand ? 1.15f : 1.0f;
+
+		glm::vec4 standColor = activeStand
+			? glm::vec4(0.0f, 0.8f, 1.0f, 1.0f)   // activo: azul/cian
+			: glm::vec4(0.1f, 0.55f, 0.2f, 1.0f);  // normal: verde
+
+		glm::vec3 finalScale = glm::vec3(1.0f, 0.9f, 0.55f) * standScale * focusScale;
+
+		/*DrawCubeObject(
+			colorShader,
+			VAO,
+			modelLoc,
+			standPositions[i],
+			finalScale,
+			standColor
+		);*/
+
+		// Panel informativo cuando el usuario se acerca
+		if (activeStand && standScale > 0.8f)
+		{
+			glm::vec3 panelPos = standPositions[i] + glm::vec3(0.0f, 1.0f, 0.0f);
+
+			DrawCubeObject(
+				colorShader,
+				VAO,
+				modelLoc,
+				panelPos,
+				glm::vec3(0.9f, 0.35f, 0.05f),
+				glm::vec4(1.0f, 1.0f, 0.2f, 1.0f)
+			);
+		}
+
+		// Pantalla dinámica en cada stand
+		if (animScreens && standScale > 0.8f)
+		{
+			glm::vec4 screenColor;
+
+			if (screenSlide == 0)
+				screenColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);       // apagada / negro
+			else if (screenSlide == 1)
+				screenColor = glm::vec4(0.0f, 0.4f, 1.0f, 1.0f);       // logo / azul
+			else
+				screenColor = glm::vec4(1.0f, 0.7f, 0.1f, 1.0f);       // anuncio / amarillo
+
+			glm::vec3 screenPos = standPositions[i] + glm::vec3(0.0f, 0.45f, -0.31f);
+
+			DrawCubeObject(
+				colorShader,
+				VAO,
+				modelLoc,
+				screenPos,
+				glm::vec3(0.65f, 0.35f, 0.03f),
+				screenColor
+			);
+		}
+	}
+
+	// ================================
+	// Animación 1: personas caminando
+	// ================================
+	if (animPeople)
+	{
+		for (int i = 0; i < NUM_PEOPLE; i++)
+		{
+			glm::vec4 personColor = (peopleDir[i] == 1)
+				? glm::vec4(0.9f, 0.1f, 0.1f, 1.0f)
+				: glm::vec4(0.1f, 0.2f, 0.9f, 1.0f);
+
+			DrawCubeObject(
+				colorShader,
+				VAO,
+				modelLoc,
+				peoplePos[i],
+				glm::vec3(0.18f, 0.5f, 0.18f),
+				personColor
+			);
+		}
+	}
+
+	// ================================
+	// Animación 4: flechas dinámicas
+	// ================================
+	if (animSigns)
+	{
+		float intensity = 0.3f + arrowPulse * 0.7f;
+		glm::vec4 arrowColor = glm::vec4(intensity, intensity, 0.0f, 1.0f);
+
+		float rot = (arrowDirection == 1) ? 0.0f : 180.0f;
+
+		for (int i = 0; i < 5; i++)
+		{
+			float z = -3.5f + i * 1.2f;
+
+			// cuerpo de la flecha
+			DrawCubeObject(
+				colorShader,
+				VAO,
+				modelLoc,
+				glm::vec3(0.0f, -0.92f, z),
+				glm::vec3(0.18f, 0.03f, 0.55f),
+				arrowColor,
+				rot
+			);
+
+			// punta de flecha simulada con cubito transversal
+			DrawCubeObject(
+				colorShader,
+				VAO,
+				modelLoc,
+				glm::vec3(0.0f, -0.90f, z + 0.35f * arrowDirection),
+				glm::vec3(0.45f, 0.03f, 0.18f),
+				arrowColor,
+				rot
+			);
+		}
+	}
+}
+
+
 
 	void MouseCallback(GLFWwindow * window, double xPos, double yPos)
 	{

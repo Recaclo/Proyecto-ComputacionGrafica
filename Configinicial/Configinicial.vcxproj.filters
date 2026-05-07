@@ -44,6 +44,12 @@
     <None Include="Shader\lighting.vs">
       <Filter>Source Files\shader</Filter>
     </None>
+    <None Include="Shader\color.frag">
+      <Filter>Source Files\shader</Filter>
+    </None>
+    <None Include="Shader\color.vs">
+      <Filter>Source Files\shader</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Maquina de estados.cpp">
